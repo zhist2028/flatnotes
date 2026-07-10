@@ -26,7 +26,6 @@
         placeholder="2FA Code"
         class="mb-1"
         autocomplete="one-time-code"
-        required
       />
       <div class="mb-4 flex">
         <input
@@ -48,7 +47,7 @@ import { useToast } from "primevue/usetoast";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 
-import { apiErrorHandler, getToken } from "../api.js";
+import { apiErrorHandler, getConfig, getToken } from "../api.js";
 import CustomButton from "../components/CustomButton.vue";
 import Logo from "../components/Logo.vue";
 import TextInput from "../components/TextInput.vue";
@@ -72,11 +71,11 @@ function logIn() {
   getToken(username.value, password.value, totp.value)
     .then((access_token) => {
       storeToken(access_token, rememberMe.value);
-      if (props.redirect) {
-        router.push(props.redirect);
-      } else {
-        router.push({ name: "home" });
-      }
+      return getConfig();
+    })
+    .then((config) => {
+      globalStore.config = config;
+      redirectAfterLogin();
     })
     .catch((error) => {
       username.value = "";
@@ -95,6 +94,14 @@ function logIn() {
         apiErrorHandler(error, toast);
       }
     });
+}
+
+function redirectAfterLogin() {
+  if (props.redirect) {
+    router.push(props.redirect);
+  } else {
+    router.push({ name: "home" });
+  }
 }
 
 // Redirect to home if authentication is disabled.

@@ -87,7 +87,7 @@ const menuItems = [
 ];
 
 const showNewButton = computed(() => {
-  return globalStore.config.authType !== authTypes.readOnly;
+  return globalStore.config.canModify;
 });
 
 function logOut() {

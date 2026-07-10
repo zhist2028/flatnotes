@@ -141,7 +141,6 @@ import LoadingIndicator from "../components/LoadingIndicator.vue";
 import Toggle from "../components/Toggle.vue";
 import ToastEditor from "../components/toastui/ToastEditor.vue";
 import ToastViewer from "../components/toastui/ToastViewer.vue";
-import { authTypes } from "../constants.js";
 import { useGlobalStore } from "../globalStore.js";
 import { getToastOptions } from "../helpers.js";
 import { isCurrentTokenStored } from "../tokenStorage.js";
@@ -150,9 +149,7 @@ const props = defineProps({
   title: String,
 });
 
-const canModify = computed(
-  () => globalStore.config.authType != authTypes.readOnly,
-);
+const canModify = computed(() => globalStore.config.canModify);
 let contentChangedTimeout = null;
 const editMode = ref(false);
 const globalStore = useGlobalStore();

@@ -1,5 +1,9 @@
+import os
 import sys
 from enum import Enum
+from typing import Optional
+
+from pydantic import Field
 
 from helpers import CustomBaseModel, get_env
 from logger import logger
@@ -15,6 +19,10 @@ class GlobalConfig:
         self.quick_access_sort: str = self._quick_access_sort()
         self.quick_access_limit: int = self._quick_access_limit()
         self.path_prefix: str = self._load_path_prefix()
+        self.storage_path: str = self._load_storage_path()
+        self.users_file: Optional[str] = self._load_users_file()
+        self.workspaces_path: str = self._load_workspaces_path()
+        self.admin_workspace: str = self._load_admin_workspace()
 
     def load_auth(self):
         if self.auth_type in (AuthType.NONE, AuthType.READ_ONLY):
@@ -22,17 +30,17 @@ class GlobalConfig:
         elif self.auth_type in (AuthType.PASSWORD, AuthType.TOTP):
             from auth.local import LocalAuth
 
-            return LocalAuth()
+            return LocalAuth(self)
 
-    def load_note_storage(self):
+    def load_note_storage(self, storage_path: str = None):
         from notes.file_system import FileSystemNotes
 
-        return FileSystemNotes()
+        return FileSystemNotes(storage_path or self.storage_path)
 
-    def load_attachment_storage(self):
+    def load_attachment_storage(self, storage_path: str = None):
         from attachments.file_system import FileSystemAttachments
 
-        return FileSystemAttachments()
+        return FileSystemAttachments(storage_path or self.storage_path)
 
     def _load_auth_type(self):
         key = "FLATNOTES_AUTH_TYPE"
@@ -101,6 +109,30 @@ class GlobalConfig:
             sys.exit(1)
         return value
 
+    def _load_storage_path(self):
+        key = "FLATNOTES_PATH"
+        return get_env(key, mandatory=True)
+
+    def _load_users_file(self):
+        key = "FLATNOTES_USERS_FILE"
+        return get_env(key, mandatory=False, default=None)
+
+    def _load_workspaces_path(self):
+        key = "FLATNOTES_WORKSPACES_PATH"
+        return get_env(
+            key,
+            mandatory=False,
+            default=os.path.join(self.storage_path, "workspaces"),
+        )
+
+    def _load_admin_workspace(self):
+        key = "FLATNOTES_ADMIN_WORKSPACE"
+        return get_env(
+            key,
+            mandatory=False,
+            default=self.storage_path,
+        )
+
 
 class AuthType(str, Enum):
     NONE = "none"
@@ -116,3 +148,6 @@ class GlobalConfigResponseModel(CustomBaseModel):
     quick_access_term: str
     quick_access_sort: str
     quick_access_limit: int
+    username: Optional[str] = Field(None)
+    is_admin: bool = Field(False)
+    can_modify: bool = Field(False)

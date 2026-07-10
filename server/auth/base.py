@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 
-from .models import Login, Token
+from fastapi import Request
+
+from .models import CurrentUser, Login, Token
 
 
 class BaseAuth(ABC):
@@ -10,6 +12,11 @@ class BaseAuth(ABC):
         pass
 
     @abstractmethod
-    def authenticate(self, token: str) -> bool:
+    def authenticate(self, request: Request, token: str) -> CurrentUser:
         """Authenticate a user."""
+        pass
+
+    @abstractmethod
+    def authenticate_optional(self, request: Request) -> CurrentUser | None:
+        """Authenticate a user if credentials are present."""
         pass

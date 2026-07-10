@@ -1,0 +1,16 @@
+{
+  "users": [
+    {
+      "username": "alice",
+      "password": "alice-password",
+      "workspace": "alice",
+      "readOnly": false
+    },
+    {
+      "username": "bob",
+      "password": "bob-password",
+      "workspace": "bob",
+      "readOnly": true
+    }
+  ]
+}

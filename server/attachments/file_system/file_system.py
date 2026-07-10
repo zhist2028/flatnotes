@@ -13,8 +13,10 @@ from ..models import AttachmentCreateResponse
 
 
 class FileSystemAttachments(BaseAttachments):
-    def __init__(self):
-        self.base_path = get_env("FLATNOTES_PATH", mandatory=True)
+    def __init__(self, storage_path: str = None):
+        self.base_path = storage_path or get_env(
+            "FLATNOTES_PATH", mandatory=True
+        )
         if not os.path.exists(self.base_path):
             raise NotADirectoryError(
                 f"'{self.base_path}' is not a valid directory."

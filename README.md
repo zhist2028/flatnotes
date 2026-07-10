@@ -101,6 +101,48 @@ services:
 
 See the [Environment Variables](https://github.com/dullage/flatnotes/wiki/Environment-Variables) article in the wiki for a full list of configuration options.
 
+### Multiple Users
+
+flatnotes can also load additional username/password accounts from a JSON
+file. The original environment-variable login remains the administrator
+account. Additional users each get their own workspace under
+`FLATNOTES_WORKSPACES_PATH`.
+
+Example environment variables:
+
+```shell
+FLATNOTES_USERS_FILE=/data/users.json
+FLATNOTES_WORKSPACES_PATH=/data/workspaces
+FLATNOTES_ADMIN_WORKSPACE=/data
+```
+
+Example `/data/users.json`:
+
+```json
+{
+  "users": [
+    {
+      "username": "alice",
+      "password": "alice-password",
+      "workspace": "alice",
+      "readOnly": false
+    },
+    {
+      "username": "bob",
+      "password": "bob-password",
+      "workspace": "bob",
+      "readOnly": true
+    }
+  ]
+}
+```
+
+User workspaces are created automatically. The `workspace` value must be a
+single safe directory name, not an absolute path or nested path. The users file
+stores passwords in plain text, so protect the mapped file on the host. A
+template is available in `users.example.json`; copy it to `data/users.json`
+before starting the container.
+
 ## Roadmap
 
 I want to keep flatnotes as simple and distraction-free as possible which means limiting new features. This said, I welcome feedback and suggestions.

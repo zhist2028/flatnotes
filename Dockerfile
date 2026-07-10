@@ -22,7 +22,7 @@ COPY client ./client
 RUN npm run build
 
 # Runtime Container
-FROM python:3.11-slim-bullseye
+FROM python:3.12-slim
 
 ARG BUILD_DIR
 
@@ -38,24 +38,30 @@ ENV FLATNOTES_PATH=/data
 RUN mkdir -p ${APP_PATH}
 RUN mkdir -p ${FLATNOTES_PATH}
 
-RUN apt update && apt install -y \
+RUN apt-get update -o Acquire::Retries=5 && apt-get install -y --no-install-recommends \
     curl \
     gosu \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir pipenv
-
 WORKDIR ${APP_PATH}
 
-COPY LICENSE Pipfile Pipfile.lock ./
-RUN pipenv install --deploy --ignore-pipfile --system && \
-    pipenv --clear
+COPY LICENSE ./
+RUN pip install --no-cache-dir \
+    whoosh==2.7.4 \
+    fastapi==0.118.3 \
+    "uvicorn[standard]==0.37.0" \
+    aiofiles==25.1.0 \
+    "python-jose[cryptography]==3.5.0" \
+    pyotp==2.9.0 \
+    qrcode==8.2 \
+    python-multipart==0.0.20
 
 COPY server ./server
 COPY --from=build --chmod=777 ${BUILD_DIR}/client/dist ./client/dist
 
 COPY entrypoint.sh healthcheck.sh /
-RUN chmod +x /entrypoint.sh /healthcheck.sh
+RUN sed -i 's/\r$//' /entrypoint.sh /healthcheck.sh && \
+    chmod +x /entrypoint.sh /healthcheck.sh
 
 VOLUME /data
 EXPOSE ${FLATNOTES_PORT}/tcp

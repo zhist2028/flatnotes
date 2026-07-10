@@ -32,6 +32,15 @@ export function apiErrorHandler(error, toast) {
       name: "login",
       query: { [constants.params.redirect]: redirectPath },
     });
+  } else if (error.response?.status === 403) {
+    toast.add(
+      getToastOptions(
+        error.response?.data?.detail ||
+          "You do not have permission to perform this action.",
+        "Permission Denied",
+        "error",
+      ),
+    );
   } else {
     console.error(error);
     toast.add(

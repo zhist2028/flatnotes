@@ -1,0 +1,26 @@
+services:
+  flatnotes:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: flatnotes:local
+    container_name: flatnotes
+    environment:
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
+      FLATNOTES_AUTH_TYPE: "${FLATNOTES_AUTH_TYPE:-password}"
+
+      # Administrator account. Override these in .env for real deployments.
+      FLATNOTES_USERNAME: "${FLATNOTES_USERNAME:-zhist}"
+      FLATNOTES_PASSWORD: "${FLATNOTES_PASSWORD:-Hezitpass08}"
+      FLATNOTES_SECRET_KEY: "${FLATNOTES_SECRET_KEY:-change-this-to-a-long-random-string}"
+
+      # Additional file-backed users.
+      FLATNOTES_USERS_FILE: "${FLATNOTES_USERS_FILE:-/data/users.json}"
+      FLATNOTES_WORKSPACES_PATH: "${FLATNOTES_WORKSPACES_PATH:-/data/workspaces}"
+      FLATNOTES_ADMIN_WORKSPACE: "${FLATNOTES_ADMIN_WORKSPACE:-/data/admin}"
+    volumes:
+      - "./data:/data"
+    ports:
+      - "${FLATNOTES_PORT:-8080}:8080"
+    restart: unless-stopped

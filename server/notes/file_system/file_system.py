@@ -47,8 +47,10 @@ class FileSystemNotes(BaseNotes):
         r"(?:(?<=^)|(?<=\s))#[a-zA-Z0-9_-]+(?=\s|$)"
     )
 
-    def __init__(self):
-        self.storage_path = get_env("FLATNOTES_PATH", mandatory=True)
+    def __init__(self, storage_path: str = None):
+        self.storage_path = storage_path or get_env(
+            "FLATNOTES_PATH", mandatory=True
+        )
         if not os.path.exists(self.storage_path):
             raise NotADirectoryError(
                 f"'{self.storage_path}' is not a valid directory."
