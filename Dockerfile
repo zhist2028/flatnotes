@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.7
+
 ARG BUILD_DIR=/build
 
 # Build Container
@@ -16,7 +18,8 @@ COPY .htmlnanorc \
     vite.config.js \
     ./
 
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --cache /root/.npm
 
 COPY client ./client
 RUN npm run build
@@ -38,15 +41,19 @@ ENV FLATNOTES_PATH=/data
 RUN mkdir -p ${APP_PATH}
 RUN mkdir -p ${FLATNOTES_PATH}
 
-RUN apt-get update -o Acquire::Retries=5 && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    rm -f /etc/apt/apt.conf.d/docker-clean && \
+    apt-get update -o Acquire::Retries=5 && \
+    apt-get install -y --no-install-recommends \
     curl \
-    gosu \
-    && rm -rf /var/lib/apt/lists/*
+    gosu
 
 WORKDIR ${APP_PATH}
 
 COPY LICENSE ./
-RUN pip install --no-cache-dir \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install \
     whoosh==2.7.4 \
     fastapi==0.118.3 \
     "uvicorn[standard]==0.37.0" \
