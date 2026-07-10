@@ -1,4 +1,5 @@
 import glob
+import html
 import os
 import re
 import shutil
@@ -8,13 +9,13 @@ from typing import List, Literal, Set, Tuple
 
 import whoosh
 from whoosh import writing
-from whoosh.analysis import CharsetFilter, StemmingAnalyzer
+from whoosh.analysis import CharsetFilter, NgramWordAnalyzer, StemmingAnalyzer
 from whoosh.fields import DATETIME, ID, KEYWORD, TEXT, SchemaClass
 from whoosh.highlight import ContextFragmenter, WholeFragmenter
 from whoosh.index import Index, LockError
-from whoosh.qparser import MultifieldParser
+from whoosh.qparser import AndGroup, MultifieldParser
 from whoosh.qparser.dateparse import DateParserPlugin
-from whoosh.query import Every
+from whoosh.query import Every, Or
 from whoosh.searching import Hit
 from whoosh.support.charset import accent_map
 
@@ -25,9 +26,12 @@ from ..base import BaseNotes
 from ..models import Note, NoteCreate, NoteUpdate, SearchResult
 
 MARKDOWN_EXT = ".md"
-INDEX_SCHEMA_VERSION = "5"
+INDEX_SCHEMA_VERSION = "6"
 
 StemmingFoldingAnalyzer = StemmingAnalyzer() | CharsetFilter(accent_map)
+SubstringFoldingAnalyzer = NgramWordAnalyzer(
+    minsize=1, maxsize=8
+) | CharsetFilter(accent_map)
 
 
 class IndexSchema(SchemaClass):
@@ -37,6 +41,12 @@ class IndexSchema(SchemaClass):
         field_boost=2.0, analyzer=StemmingFoldingAnalyzer, sortable=True
     )
     content = TEXT(analyzer=StemmingFoldingAnalyzer)
+    title_substring = TEXT(
+        field_boost=0.7, analyzer=SubstringFoldingAnalyzer
+    )
+    content_substring = TEXT(
+        field_boost=0.3, analyzer=SubstringFoldingAnalyzer
+    )
     tags = KEYWORD(lowercase=True, field_boost=2.0)
 
 
@@ -129,6 +139,13 @@ class FileSystemNotes(BaseNotes):
                 )
                 parser.add_plugin(DateParserPlugin())
                 query = parser.parse(term)
+                if self._should_search_substrings(term):
+                    substring_parser = MultifieldParser(
+                        self._substring_fieldnames(),
+                        self.index.schema,
+                        group=AndGroup,
+                    )
+                    query = Or([query, substring_parser.parse(term)])
 
             # Determine Sort By
             # Note: For the 'sort' option, "score" is converted to None as
@@ -151,7 +168,9 @@ class FileSystemNotes(BaseNotes):
                 limit=limit,
                 terms=True,
             )
-            return tuple(self._search_result_from_hit(hit) for hit in results)
+            return tuple(
+                self._search_result_from_hit(hit, term) for hit in results
+            )
 
     def get_tags(self) -> list[str]:
         """Return a list of all indexed tags. Note: Tags no longer in use will
@@ -221,6 +240,8 @@ class FileSystemNotes(BaseNotes):
             last_modified=datetime.fromtimestamp(note.last_modified),
             title=note.title,
             content=content_ex_tags,
+            title_substring=note.title,
+            content_substring=content_ex_tags,
             tags=tag_string,
         )
 
@@ -323,8 +344,9 @@ class FileSystemNotes(BaseNotes):
             elif os.path.isdir(item_path):
                 shutil.rmtree(item_path)
 
-    def _search_result_from_hit(self, hit: Hit):
+    def _search_result_from_hit(self, hit: Hit, term: str):
         matched_fields = self._get_matched_fields(hit.matched_terms())
+        substring_search = self._should_search_substrings(term)
 
         title = self._strip_ext(hit["filename"])
         last_modified = hit["last_modified"].timestamp()
@@ -337,6 +359,8 @@ class FileSystemNotes(BaseNotes):
         if "title" in matched_fields:
             hit.results.fragmenter = WholeFragmenter()
             title_highlights = hit.highlights("title", text=title)
+        elif substring_search and "title_substring" in matched_fields:
+            title_highlights = self._highlight_text(title, term)
         else:
             title_highlights = None
 
@@ -347,6 +371,14 @@ class FileSystemNotes(BaseNotes):
             content_highlights = hit.highlights(
                 "content",
                 text=content_ex_tags,
+            )
+        elif substring_search and "content_substring" in matched_fields:
+            content = self._read_file(self._path_from_title(title))
+            content_ex_tags, _ = FileSystemNotes._extract_tags(content)
+            content_highlights = self._highlight_text(
+                content_ex_tags,
+                term,
+                fragment=True,
             )
         else:
             content_highlights = None
@@ -375,6 +407,57 @@ class FileSystemNotes(BaseNotes):
             # If the term does not include a phrase then also search tags
             fields.append("tags")
         return fields
+
+    @staticmethod
+    def _substring_fieldnames() -> List[str]:
+        return ["title_substring", "content_substring"]
+
+    @staticmethod
+    def _should_search_substrings(term: str) -> bool:
+        return bool(term) and not re.search(r'["*?:]', term)
+
+    @staticmethod
+    def _highlight_text(text: str, term: str, fragment: bool = False):
+        terms = [
+            part
+            for part in re.split(r"\s+", term.strip())
+            if part and not re.search(r'["*?:]', part)
+        ]
+        if not terms:
+            return None
+
+        pattern = re.compile(
+            "|".join(
+                re.escape(term)
+                for term in sorted(terms, key=len, reverse=True)
+            ),
+            re.IGNORECASE,
+        )
+        match = pattern.search(text)
+        if not match:
+            return None
+
+        prefix = ""
+        suffix = ""
+        if fragment:
+            start = max(0, match.start() - 80)
+            end = min(len(text), match.end() + 160)
+            prefix = "..." if start > 0 else ""
+            suffix = "..." if end < len(text) else ""
+            text = text[start:end]
+
+        highlighted_parts = []
+        last_end = 0
+        for match in pattern.finditer(text):
+            highlighted_parts.append(html.escape(text[last_end : match.start()]))
+            highlighted_parts.append(
+                '<strong class="match term0">'
+                + html.escape(match.group())
+                + "</strong>"
+            )
+            last_end = match.end()
+        highlighted_parts.append(html.escape(text[last_end:]))
+        return prefix + "".join(highlighted_parts) + suffix
 
     @staticmethod
     def _get_matched_fields(matched_terms):
