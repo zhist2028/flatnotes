@@ -42,14 +42,43 @@
     <!-- Header -->
     <div class="flex flex-col-reverse md:flex-row md:items-baseline">
       <!-- Title -->
-      <div class="grow truncate text-3xl leading-[1.6em]">
-        <span v-show="!editMode" :title="note.title">{{ note.title }}</span>
-        <input
-          v-show="editMode"
-          v-model.trim="newTitle"
-          class="w-full bg-theme-background outline-none"
-          placeholder="Title"
-        />
+      <div class="grow text-3xl leading-[1.6em]">
+        <span v-show="!editMode" :title="note.title" class="block truncate">{{
+          note.title
+        }}</span>
+        <div v-show="editMode" class="relative">
+          <input
+            v-model.trim="newTitle"
+            class="w-full bg-theme-background outline-none"
+            placeholder="Title"
+            autocomplete="off"
+            @blur="hideTitleSuggestions"
+            @focus="showTitleSuggestions"
+            @input="titleInputHandler"
+            @keydown="titleKeydownHandler"
+          />
+          <div
+            v-if="visibleTitleSuggestions.length"
+            class="absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-y-auto rounded border border-theme-border bg-theme-background text-base leading-normal shadow-lg shadow-theme-shadow print:hidden"
+          >
+            <button
+              v-for="(suggestion, index) in visibleTitleSuggestions"
+              :key="suggestion.completion"
+              type="button"
+              class="block w-full truncate px-3 py-2 text-left hover:bg-theme-background-elevated"
+              :class="{
+                'bg-theme-background-elevated':
+                  index === selectedTitleSuggestionIndex,
+              }"
+              @mousedown.prevent="acceptTitleSuggestion(suggestion)"
+            >
+              <span class="text-theme-text-muted">{{
+                titleSuggestionPrefix
+              }}</span
+              >{{ suggestion.segment }}
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- Buttons -->
@@ -131,6 +160,7 @@ import {
   createAttachment,
   createNote,
   deleteNote,
+  getNotes,
   getNote,
   updateNote,
 } from "../api.js";
@@ -143,6 +173,7 @@ import ToastEditor from "../components/toastui/ToastEditor.vue";
 import ToastViewer from "../components/toastui/ToastViewer.vue";
 import { useGlobalStore } from "../globalStore.js";
 import { getToastOptions } from "../helpers.js";
+import { getTitleSuggestions } from "../titleSuggestions.js";
 import { isCurrentTokenStored } from "../tokenStorage.js";
 
 const props = defineProps({
@@ -162,9 +193,28 @@ const note = ref({});
 const reservedFilenameCharacters = /[<>:"/\\|?*]/;
 const router = useRouter();
 const newTitle = ref();
+const allNoteTitles = ref([]);
+const selectedTitleSuggestionIndex = ref(0);
+const titleSuggestionsVisible = ref(false);
 const toast = useToast();
 const toastEditor = ref();
 const unsavedChanges = ref(false);
+
+const visibleTitleSuggestions = computed(() => {
+  if (!editMode.value || !titleSuggestionsVisible.value) {
+    return [];
+  }
+  const titles = allNoteTitles.value.filter((title) => {
+    return title !== note.value.title;
+  });
+  return getTitleSuggestions(newTitle.value, titles);
+});
+
+const titleSuggestionPrefix = computed(() => {
+  const parts = (newTitle.value || "").split(".");
+  const prefixParts = parts.slice(0, -1);
+  return prefixParts.length ? prefixParts.join(".") + "." : "";
+});
 
 function init() {
   // Return if we already have the note e.g. When we rename a note, the route prop would change but we’d already have the note.
@@ -223,11 +273,91 @@ function setEditMode() {
   newTitle.value = note.value.title;
   unsavedChanges.value = false;
   editMode.value = true;
+  titleSuggestionsVisible.value = false;
+  selectedTitleSuggestionIndex.value = 0;
+  loadTitleSuggestionTitles();
 }
 
 function getInitialEditorValue() {
   const draftContent = loadDraft();
   return draftContent ? draftContent : note.value.content;
+}
+
+function loadTitleSuggestionTitles() {
+  getNotes("*", "title", "asc")
+    .then((notes) => {
+      allNoteTitles.value = notes.map((note) => note.title);
+    })
+    .catch((error) => {
+      apiErrorHandler(error, toast);
+    });
+}
+
+function addTitleSuggestionTitle(title) {
+  if (title && !allNoteTitles.value.includes(title)) {
+    allNoteTitles.value = [...allNoteTitles.value, title];
+  }
+}
+
+function removeTitleSuggestionTitle(titleToRemove) {
+  allNoteTitles.value = allNoteTitles.value.filter((title) => {
+    return title !== titleToRemove;
+  });
+}
+
+function replaceTitleSuggestionTitle(oldTitle, newTitle) {
+  allNoteTitles.value = allNoteTitles.value.filter((title) => {
+    return title !== oldTitle && title !== newTitle;
+  });
+  addTitleSuggestionTitle(newTitle);
+}
+
+function showTitleSuggestions() {
+  titleSuggestionsVisible.value = true;
+}
+
+function hideTitleSuggestions() {
+  titleSuggestionsVisible.value = false;
+}
+
+function titleInputHandler() {
+  showTitleSuggestions();
+  selectedTitleSuggestionIndex.value = 0;
+  startContentChangedTimeout();
+}
+
+function titleKeydownHandler(event) {
+  const suggestions = visibleTitleSuggestions.value;
+
+  if (event.key === "Escape" && titleSuggestionsVisible.value) {
+    hideTitleSuggestions();
+    event.preventDefault();
+    return;
+  }
+
+  if (!suggestions.length) {
+    return;
+  }
+
+  if (event.key === "ArrowDown") {
+    selectedTitleSuggestionIndex.value =
+      (selectedTitleSuggestionIndex.value + 1) % suggestions.length;
+    event.preventDefault();
+  } else if (event.key === "ArrowUp") {
+    selectedTitleSuggestionIndex.value =
+      (selectedTitleSuggestionIndex.value - 1 + suggestions.length) %
+      suggestions.length;
+    event.preventDefault();
+  } else if (event.key === "Enter" || event.key === "Tab") {
+    acceptTitleSuggestion(suggestions[selectedTitleSuggestionIndex.value]);
+    event.preventDefault();
+  }
+}
+
+function acceptTitleSuggestion(suggestion) {
+  newTitle.value = suggestion.completion;
+  hideTitleSuggestions();
+  startContentChangedTimeout();
 }
 
 // Note Deletion
@@ -238,6 +368,7 @@ function deleteHandler() {
 function deleteConfirmedHandler() {
   deleteNote(note.value.title)
     .then(() => {
+      removeTitleSuggestionTitle(note.value.title);
       toast.add(getToastOptions("Note deleted ✓", "Success", "success"));
       router.push({ name: "home" });
     })
@@ -279,6 +410,7 @@ function saveNew(newTitle, newContent, close = false) {
     .then((data) => {
       clearDraft();
       note.value = data;
+      addTitleSuggestionTitle(data.title);
       router
         .push({
           name: "note",
@@ -300,10 +432,12 @@ function saveExisting(newTitle, newContent, close = false) {
     return;
   }
 
+  const oldTitle = note.value.title;
   updateNote(note.value.title, newTitle, newContent)
     .then((data) => {
       clearDraft();
       note.value = data;
+      replaceTitleSuggestionTitle(oldTitle, data.title);
       router.replace({ name: "note", params: { title: note.value.title } });
       noteSaveSuccess(close);
     })
@@ -530,6 +664,14 @@ function isContentChanged() {
   );
 }
 
+watch(
+  () => visibleTitleSuggestions.value.length,
+  (suggestionCount) => {
+    if (selectedTitleSuggestionIndex.value >= suggestionCount) {
+      selectedTitleSuggestionIndex.value = 0;
+    }
+  },
+);
 watch(() => props.title, init);
 onMounted(init);
 </script>
