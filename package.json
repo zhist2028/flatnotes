@@ -5,7 +5,7 @@
   "description": "A database-less note taking web app that utilises a flat folder of markdown files for storage.",
   "main": "client/index.html",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test client/*.test.js",
     "build": "vite build",
     "watch": "vite build --watch",
     "dev": "vite"

@@ -25,6 +25,7 @@ export default {
         "theme-text-muted": "rgb(var(--theme-text-muted) / <alpha-value>)",
         "theme-text-very-muted":
           "rgb(var(--theme-text-very-muted) / <alpha-value>)",
+        "theme-link": "rgb(var(--theme-link) / <alpha-value>)",
         "theme-shadow": "rgb(var(--theme-shadow) / <alpha-value>)",
         "theme-border": "rgb(var(--theme-border) / <alpha-value>)",
         // Static
